@@ -13,6 +13,12 @@ import requests
 import time
 import json
 
+import logging
+
+# Setup logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 # Initialize client
 # Retrieve parameters from SSM
 ssm = boto3.client("ssm")
@@ -351,12 +357,15 @@ class Profile(BaseModel):
 
 def lambda_handler(event, context):
     try:
+        logger.info("Lambda invoked")
         # 1. Parse request body
         body = json.loads(event.get('body', '{}'))
+        logger.info("Request body parsed: %s", body)
         required_fields = ['key', 'fileName', 'size', 'contentType']
         missing_fields = [field for field in required_fields if not body.get(field)]
 
         if missing_fields:
+            logger.warning("Missing required fields: %s", missing_fields)
             return {
                 "statusCode": 400,
                 "body": json.dumps({
@@ -365,29 +374,38 @@ def lambda_handler(event, context):
             }
 
         key = body.get("key")
+        logger.info("S3 key: %s", key)
 
+        logger.info("Downloading file from S3...")
         # 2. Download file from S3
         s3 = boto3.client("s3")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             s3.download_fileobj(BUCKET_NAME, key, tmp_file)
             local_path = tmp_file.name
+        
+        logger.info("File downloaded to temporary path: %s", local_path)
 
         # 3. Delete all existing agents first
+        logger.info("Listing existing agents...")
         existing_agents = extractor.list_agents()
         for agent_info in existing_agents:
             try:
                 extractor.delete_agent(agent_info.id)
-                print(f"Deleted agent {agent_info.id}")
+                logger.info("Deleted agent: %s", agent_info.id)
             except Exception as delete_err:
-                print(f"Warning: Failed to delete agent {agent_info.id}: {str(delete_err)}")
+                logger.warning("Failed to delete agent %s: %s", agent_info.id, str(delete_err))
 
         # 4. Create new agent
         agent_name = f"resume-parser-{uuid.uuid4()}"
+        logger.info("Creating new agent: %s", agent_name)
         agent = extractor.create_agent(name=agent_name, data_schema=Profile)
+        logger.info("Agent created: %s", agent.id)
 
         # 5. Extract data
+        logger.info("Extracting resume data...")
         result = agent.extract(local_path)
         candidate_dict = result.data
+        logger.info("Resume data extracted.")
 
         # 6. Add resume metadata
         resumeAttachment = {
@@ -397,18 +415,23 @@ def lambda_handler(event, context):
             "key": body.get("key")
         }
         candidate_dict["resumeAttachment"] = resumeAttachment
+        logger.info("Resume metadata added.")
 
         # 7. Delete temp file
         if os.path.exists(local_path):
             os.remove(local_path)
+            logger.info("Temporary file deleted: %s", local_path)
 
         # 8. Delete agent
         try:
             extractor.delete_agent(agent.id)
+            logger.info("Agent deleted: %s", agent.id)
         except Exception as delete_err:
             print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
+            logger.warning("Failed to delete agent %s: %s", agent.id, str(delete_err))
 
         # 9. Send result to candidate service
+        logger.info("Sending extracted data to candidate service...")
         response = requests.post(
             CANDIDATE_SERVICE_URL,
             json=candidate_dict,
@@ -416,6 +439,7 @@ def lambda_handler(event, context):
             timeout=30
         )
         response.raise_for_status()
+        logger.info("Candidate data successfully sent. Response: %s", response.text)
 
         return {
             "statusCode": 200,
