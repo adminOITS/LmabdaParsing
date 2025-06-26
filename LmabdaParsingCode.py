@@ -405,7 +405,9 @@ def lambda_handler(event, context):
         logger.info("Extracting resume data...")
         result = agent.extract(local_path)
         candidate_dict = result.data
-        logger.info("Resume data extracted.")
+        
+        logger.info("*******************************************************************")
+        logger.info("Resume data extracted.%s",candidate_dict)
 
         # 6. Add resume metadata
         resumeAttachment = {
@@ -422,13 +424,6 @@ def lambda_handler(event, context):
             os.remove(local_path)
             logger.info("Temporary file deleted: %s", local_path)
 
-        # 8. Delete agent
-        try:
-            extractor.delete_agent(agent.id)
-            logger.info("Agent deleted: %s", agent.id)
-        except Exception as delete_err:
-            print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
-            logger.warning("Failed to delete agent %s: %s", agent.id, str(delete_err))
 
         # 9. Send result to candidate service
         logger.info("Sending extracted data to candidate service...")
@@ -449,11 +444,6 @@ def lambda_handler(event, context):
     except Exception as e:
         if 'local_path' in locals() and os.path.exists(local_path):
             os.remove(local_path)
-        if 'agent' in locals() and agent:
-            try:
-                extractor.delete_agent(agent.id)
-            except Exception as delete_err:
-                print(f"Cleanup error: Failed to delete agent {agent.id}: {str(delete_err)}")
         return {
             "statusCode": 500,
             "body": f"Error: {str(e)}"
