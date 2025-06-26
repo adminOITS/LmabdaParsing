@@ -305,21 +305,23 @@ class Skill(BaseModel):
 class Experience(BaseModel):
     jobTitle: str = Field(..., description="Candidate's job title, e.g., Software Engineer")
     company: str = Field(..., description="Company name")
-    startDate: date = Field(..., description="Start date of employment")
-    endDate: Optional[date] = Field(None, description="End date of employment, if applicable")
+    startDate: str = Field(..., description="Start date (formats: DD-MM-YYYY, MM-YYYY, or YYYY)")
+    endDate: Optional[str] = Field(None, description="End date (formats: DD-MM-YYYY, MM-YYYY, or YYYY)")
     current: bool = Field(..., description="Whether this job is currently held")
     description: Optional[str] = Field(None, description="Brief summary of responsibilities and achievements")
     location: Optional[str] = Field(None, description="Job location (e.g., city)")
     industry: Optional[str] = Field(None, description="Industry sector, e.g., IT, Finance")
 
+
 class Education(BaseModel):
     degree: str = Field(..., description="Degree earned, e.g., Bachelor, Master")
     field: str = Field(..., description="Field of study, e.g., Computer Science")
     institution: str = Field(..., description="Name of the educational institution")
-    startDate: date = Field(..., description="Start date of the education period")
-    endDate: Optional[date] = Field(None, description="End date of the education period, if applicable")
+    startDate: str = Field(..., description="Start date (formats: DD-MM-YYYY, MM-YYYY, or YYYY)")
+    endDate: Optional[str] = Field(None, description="End date (formats: DD-MM-YYYY, MM-YYYY, or YYYY)")
     current: bool = Field(..., description="Is the education ongoing?")
     location: Optional[str] = Field(None, description="Location of the institution")
+
 
 class Language(BaseModel):
     language: Language = Field(..., description="Name of the language, e.g., English")
@@ -347,13 +349,10 @@ class Profile(BaseModel):
 
 
 
-
-# Lambda Handler
 def lambda_handler(event, context):
     try:
-        # 1. Get S3 info from event
+        # 1. Parse request body
         body = json.loads(event.get('body', '{}'))
-    
         required_fields = ['key', 'fileName', 'size', 'contentType']
         missing_fields = [field for field in required_fields if not body.get(field)]
 
@@ -365,95 +364,73 @@ def lambda_handler(event, context):
                 })
             }
 
-        # Get key from request
         key = body.get("key")
-        # 2. Download file from S3 to temp location
+
+        # 2. Download file from S3
         s3 = boto3.client("s3")
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
             s3.download_fileobj(BUCKET_NAME, key, tmp_file)
             local_path = tmp_file.name
 
-        # 3. Wait until an agent slot is available (max 10 minutes)
-        MAX_WAIT_TIME = 300  # 5 minutes
-        POLL_INTERVAL = 5    # 5 seconds
-        start_time = time.time()
-        agent = None  # define early so it's available in exception block
+        # 3. Delete all existing agents first
+        existing_agents = extractor.list_agents()
+        for agent_info in existing_agents:
+            try:
+                extractor.delete_agent(agent_info.id)
+                print(f"Deleted agent {agent_info.id}")
+            except Exception as delete_err:
+                print(f"Warning: Failed to delete agent {agent_info.id}: {str(delete_err)}")
 
-        while True:
-            existing_agents = extractor.list_agents()
+        # 4. Create new agent
+        agent_name = f"resume-parser-{uuid.uuid4()}"
+        agent = extractor.create_agent(name=agent_name, data_schema=Profile)
 
-            if len(existing_agents) < 2:
-                agent_name = f"resume-parser-{uuid.uuid4()}"
-                agent = extractor.create_agent(name=agent_name, data_schema=Profile)
-                break
-            elif time.time() - start_time > MAX_WAIT_TIME:
-                # Delete all existing agents as last resort
-                for agent_info in existing_agents:
-                    try:
-                        extractor.delete_agent(agent_info["id"])
-                        print(f"Deleted agent {agent_info['id']} after timeout.")
-                    except Exception as delete_err:
-                        print(f"Failed to delete agent {agent_info['id']}: {str(delete_err)}")
-                
-                raise Exception("Timeout reached. All existing agents deleted to recover slots.")
-            else:
-                time.sleep(POLL_INTERVAL)
-        # 4. Extract data
+        # 5. Extract data
         result = agent.extract(local_path)
-
         candidate_dict = result.data
 
-        # Create attachment object from the original request
+        # 6. Add resume metadata
         resumeAttachment = {
             "fileName": body.get("fileName"),
-            "contentType": body.get("contentType"),   # e.g., "PDF"
+            "contentType": body.get("contentType"),
             "size": body.get("size"),
-            "key": body.get("key")                          # or candidate ID if available
+            "key": body.get("key")
         }
-
         candidate_dict["resumeAttachment"] = resumeAttachment
 
-        # Delete the temp file after processing
+        # 7. Delete temp file
         if os.path.exists(local_path):
             os.remove(local_path)
 
+        # 8. Delete agent
+        try:
+            extractor.delete_agent(agent.id)
+        except Exception as delete_err:
+            print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
 
-        # 8. Delete the agent after use
-        if agent:
-            try:
-                extractor.delete_agent(agent.id)
-            except Exception as delete_err:
-                print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
-
-                
-        # Send extracted candidate JSON to Candidate microservice
+        # 9. Send result to candidate service
         response = requests.post(
             CANDIDATE_SERVICE_URL,
             json=candidate_dict,
             headers={"Content-Type": "application/json"},
             timeout=30
         )
-
-        response.raise_for_status()  # Raise exception if status >=400
-        
+        response.raise_for_status()
 
         return {
             "statusCode": 200,
-            "body": json.dumps(response.json())  # Return response from candidate service
+            "body": json.dumps(response.json())
         }
 
     except Exception as e:
-        # Attempt to delete the file even on error         
         if 'local_path' in locals() and os.path.exists(local_path):
             os.remove(local_path)
-        if agent:
+        if 'agent' in locals() and agent:
             try:
                 extractor.delete_agent(agent.id)
             except Exception as delete_err:
-                print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
+                print(f"Cleanup error: Failed to delete agent {agent.id}: {str(delete_err)}")
         return {
             "statusCode": 500,
             "body": f"Error: {str(e)}"
         }
-
-
