@@ -10,7 +10,7 @@ import boto3
 import os
 import tempfile
 import requests
- 
+import time
 import json
 
 # Initialize client
@@ -373,16 +373,37 @@ def lambda_handler(event, context):
             s3.download_fileobj(BUCKET_NAME, key, tmp_file)
             local_path = tmp_file.name
 
-        agent_name = f"resume-parser-{uuid.uuid4()}"
-        
-        agent = extractor.create_agent(name=agent_name, data_schema=Profile)
+        # 3. Wait until an agent slot is available (max 10 minutes)
+        MAX_WAIT_TIME = 300  # 5 minutes
+        POLL_INTERVAL = 5    # 5 seconds
+        start_time = time.time()
+        agent = None  # define early so it's available in exception block
 
+        while True:
+            existing_agents = extractor.list_agents()
+
+            if len(existing_agents) < 2:
+                agent_name = f"resume-parser-{uuid.uuid4()}"
+                agent = extractor.create_agent(name=agent_name, data_schema=Profile)
+                break
+            elif time.time() - start_time > MAX_WAIT_TIME:
+                # Delete all existing agents as last resort
+                for agent_info in existing_agents:
+                    try:
+                        extractor.delete_agent(agent_info["id"])
+                        print(f"Deleted agent {agent_info['id']} after timeout.")
+                    except Exception as delete_err:
+                        print(f"Failed to delete agent {agent_info['id']}: {str(delete_err)}")
+                
+                raise Exception("Timeout reached. All existing agents deleted to recover slots.")
+            else:
+                time.sleep(POLL_INTERVAL)
         # 4. Extract data
         result = agent.extract(local_path)
 
         candidate_dict = result.data
 
-         # Create attachment object from the original request
+        # Create attachment object from the original request
         resumeAttachment = {
             "fileName": body.get("fileName"),
             "contentType": body.get("contentType"),   # e.g., "PDF"
@@ -406,7 +427,13 @@ def lambda_handler(event, context):
         )
 
         response.raise_for_status()  # Raise exception if status >=400
-
+        
+        # 8. Delete the agent after use
+        if agent:
+            try:
+                extractor.delete_agent(agent.id)
+            except Exception as delete_err:
+                print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
 
         return {
             "statusCode": 200,
@@ -417,6 +444,11 @@ def lambda_handler(event, context):
         # Attempt to delete the file even on error         
         if 'local_path' in locals() and os.path.exists(local_path):
             os.remove(local_path)
+        if agent:
+            try:
+                extractor.delete_agent(agent.id)
+            except Exception as delete_err:
+                print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
         return {
             "statusCode": 500,
             "body": f"Error: {str(e)}"
