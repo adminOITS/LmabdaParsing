@@ -418,6 +418,14 @@ def lambda_handler(event, context):
             os.remove(local_path)
 
 
+        # 8. Delete the agent after use
+        if agent:
+            try:
+                extractor.delete_agent(agent.id)
+            except Exception as delete_err:
+                print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
+
+                
         # Send extracted candidate JSON to Candidate microservice
         response = requests.post(
             CANDIDATE_SERVICE_URL,
@@ -428,12 +436,6 @@ def lambda_handler(event, context):
 
         response.raise_for_status()  # Raise exception if status >=400
         
-        # 8. Delete the agent after use
-        if agent:
-            try:
-                extractor.delete_agent(agent.id)
-            except Exception as delete_err:
-                print(f"Warning: Failed to delete agent {agent.id}: {str(delete_err)}")
 
         return {
             "statusCode": 200,
