@@ -388,12 +388,13 @@ def lambda_handler(event, context):
         # 3. Delete all existing agents first
         logger.info("Listing existing agents...")
         existing_agents = extractor.list_agents()
-        for agent_info in existing_agents:
-            try:
-                extractor.delete_agent(agent_info.id)
-                logger.info("Deleted agent: %s", agent_info.id)
-            except Exception as delete_err:
-                logger.warning("Failed to delete agent %s: %s", agent_info.id, str(delete_err))
+        if len(existing_agents) >= 2:
+            for agent_info in existing_agents:
+                try:
+                    extractor.delete_agent(agent_info.id)
+                    logger.info("Deleted agent: %s", agent_info.id)
+                except Exception as delete_err:
+                    logger.warning("Failed to delete agent %s: %s", agent_info.id, str(delete_err))
 
         # 4. Create new agent
         agent_name = f"resume-parser-{uuid.uuid4()}"
