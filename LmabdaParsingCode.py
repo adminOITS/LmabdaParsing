@@ -38,7 +38,6 @@ extractor = LlamaExtract(api_key=API_KEY)
 
 
 class Language(str, Enum):
-class Language(str, Enum):
     ENGLISH = "ENGLISH"
     FRENCH = "FRENCH"
     GERMAN = "GERMAN"
@@ -100,9 +99,9 @@ class LanguageProficiencyLevel(str, Enum):
 
 # Define nested schema models
 class Address(BaseModel):
-    city: str=Field(..., description="City where the candidate resides")
-    country: str
-    zipCode: Optional[str]=Field(None, description="Postal or ZIP code")
+    city: str=Field(..., description="City where the candidate resides default NOT_DEFINED")
+    country: str==Field(..., description="Country where the candidate resides default NOT_DEFINED")
+    zipCode: Optional[str]=Field(None, description="Postal or ZIP code") 
     addressLine1: Optional[str]=Field(None, description="Street address")
     state:Optional[str]=Field(None, description="state address")
 
@@ -117,7 +116,7 @@ class Skill(BaseModel):
     proficiencyLevel: SkillProficiencyLevel = Field(..., description="Level of proficiency with the skill")
 
 class Experience(BaseModel):
-    jobTitle: str = Field(..., description="Candidate's job title, e.g., Software Engineer")
+    jobTitle: str = Field(..., description="Candidate's job title, e.g., Software Engineer default NOT_DEFINED")
     company: str = Field(..., description="Company name")
     startDate: str = Field(..., description="Start date (formats: DD-MM-YYYY, MM-YYYY, or YYYY)")
     endDate: Optional[str] = Field(None, description="End date (formats: DD-MM-YYYY, MM-YYYY, or YYYY)")
@@ -128,7 +127,7 @@ class Experience(BaseModel):
 
 
 class Education(BaseModel):
-    degree: str = Field(..., description="Degree earned, e.g., Bachelor, Master")
+    degree: str = Field(..., description="Degree earned, e.g., Bachelor, Master default NOT_DEFINED")
     field: str = Field(..., description="Field of study, e.g., Computer Science")
     institution: str = Field(..., description="Name of the educational institution")
     startDate: str = Field(..., description="Start date (formats: DD-MM-YYYY, MM-YYYY, or YYYY)")
@@ -138,14 +137,14 @@ class Education(BaseModel):
 
 
 class Language(BaseModel):
-    language: Language = Field(..., description="Name of the language, e.g., English")
+    language: Language = Field(..., description="Name of the language, e.g., English default NOT_DEFINED")
     proficiencyLevel: LanguageProficiencyLevel = Field(..., description="Proficiency level in the language")
 
 class Candidate(BaseModel):
-    firstName: str = Field(..., description="Candidate's first name")
-    lastName: str = Field(..., description="Candidate's last name")
-    phone: Optional[str] = Field(None, description="Candidate's phone number")
-    email: str = Field(..., description="Candidate's email address")
+    firstName: str = Field(..., description="Candidate's first name default NOT_DEFINED")
+    lastName: str = Field(..., description="Candidate's last name default NOT_DEFINED")
+    phone: Optional[str] = Field(None, description="Candidate's phone number default NOT_DEFINED")
+    email: str = Field(..., description="Candidate's email address If an email appears in the résumé, return it exactly as written , If none is found {firstName_lower}.{lastName_lower}@not-defined.com use NOT_DEFINED when first/last name are unknown ")
     birthday: Optional[str] = Field(None, description="Birthdate Date (DD-MM-YYYY)")
     address: Optional[Address] = Field(None, description="Candidate's residential address")
     socialLinks: Optional[SocialLinks] = Field(None, description="Links to professional profiles")
@@ -179,11 +178,14 @@ def get_or_create_agent(name: str, schema):
 
 
 def lambda_handler(event, context):
+    
     try:
         logger.info("Lambda invoked")
-        # 1. Parse request body
-        body = json.loads(event.get('body', '{}'))
-        logger.info("Request body parsed: %s", body)
+        # Only one record expected per invocation
+        record = event["Records"][0]
+        body = json.loads(record["body"])
+        logger.info("Processing SQS message: %s", body)
+
         required_fields = ['key', 'fileName', 'size', 'contentType']
         missing_fields = [field for field in required_fields if not body.get(field)]
 
