@@ -100,7 +100,7 @@ class LanguageProficiencyLevel(str, Enum):
 # Define nested schema models
 class Address(BaseModel):
     city: str=Field(..., description="City where the candidate resides default NOT_DEFINED")
-    country: str==Field(..., description="Country where the candidate resides default NOT_DEFINED")
+    country: str=Field(..., description="Country where the candidate resides default NOT_DEFINED")
     zipCode: Optional[str]=Field(None, description="Postal or ZIP code") 
     addressLine1: Optional[str]=Field(None, description="Street address")
     state:Optional[str]=Field(None, description="state address")
