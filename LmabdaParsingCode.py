@@ -34,6 +34,20 @@ CANDIDATE_SERVICE_URL = get_parameter("/llama/candidate_api_key", with_decryptio
 
 extractor = LlamaExtract(api_key=API_KEY)
 
+
+def update_status(track_id, status, reason=None):
+    """Call API to update status."""
+    url = f"{CANDIDATE_SERVICE_URL}/ai-processing-track/{track_id}/status/{status}"
+    params = {}
+    if reason:
+        params['reason'] = reason
+    try:
+        response = requests.put(url, params=params, timeout=15)
+        response.raise_for_status()
+        logger.info(f"Updated status '{status}' for trackId={track_id}")
+    except Exception as e:
+        logger.error(f"Failed to update status '{status}' for trackId={track_id}: {e}")
+
 # Define all Pydantic models (skip here for brevity — keep your original ones unchanged)
 
 
@@ -186,7 +200,7 @@ def lambda_handler(event, context):
         body = json.loads(record["body"])
         logger.info("Processing SQS message: %s", body)
 
-        required_fields = ['key', 'fileName', 'size', 'contentType']
+        required_fields = ['key','entityId']
         missing_fields = [field for field in required_fields if not body.get(field)]
 
         if missing_fields:
@@ -201,6 +215,7 @@ def lambda_handler(event, context):
         key = body.get("key")
         logger.info("S3 key: %s", key)
 
+
         logger.info("Downloading file from S3...")
         # 2. Download file from S3
         s3 = boto3.client("s3")
@@ -209,6 +224,10 @@ def lambda_handler(event, context):
             local_path = tmp_file.name
         
         logger.info("File downloaded to temporary path: %s", local_path)
+
+        track_id = body.get("entityId")  # AI processing track ID
+        # Mark the processing as IN_PROGRESS
+        update_status(track_id, "in-progress")
 
         # 4. Create new agent
         agent = get_or_create_agent("resume-parser-1", Profile)
@@ -220,15 +239,9 @@ def lambda_handler(event, context):
         logger.info("*******************************************************************")
         logger.info("Resume data extracted.%s",candidate_dict)
 
-        # 6. Add resume metadata
-        resumeAttachment = {
-            "fileName": body.get("fileName"),
-            "contentType": body.get("contentType"),
-            "size": body.get("size"),
-            "key": body.get("key")
-        }
-        candidate_dict["resumeAttachment"] = resumeAttachment
-        logger.info("Resume metadata added.")
+        # 6. Add only the entityId  (the track Id ) to candidate data
+        candidate_dict["entityId"] = body.get("entityId")
+        logger.info("Entity ID added to candidate data: %s", candidate_dict["entityId"])
 
         # 7. Delete temp file
         if os.path.exists(local_path):
@@ -238,8 +251,9 @@ def lambda_handler(event, context):
 
         # 9. Send result to candidate service
         logger.info("Sending extracted data to candidate service...")
+        candidate_api_url_generate_candidate_endpoint= f"{CANDIDATE_SERVICE_URL}/candidates/ai/ai-generator"
         response = requests.post(
-            CANDIDATE_SERVICE_URL,
+            candidate_api_url_generate_candidate_endpoint,
             json=candidate_dict,
             headers={"Content-Type": "application/json"},
             timeout=30
@@ -253,6 +267,20 @@ def lambda_handler(event, context):
         }
 
     except Exception as e:
+        logger.error(f"Error processing resume: {e}")
+
+        # Attempt to mark processing as FAILED if trackId available in body
+        track_id = None
+        try:
+            record = event["Records"][0]
+            body = json.loads(record["body"])
+            track_id = body.get("entityId")
+        except Exception:
+            pass
+
+        if track_id:
+            update_status(track_id, "failed", reason=str(e))
+
         if 'local_path' in locals() and os.path.exists(local_path):
             os.remove(local_path)
         return {
