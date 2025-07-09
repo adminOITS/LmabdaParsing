@@ -251,7 +251,7 @@ def lambda_handler(event, context):
 
         # 9. Send result to candidate service
         logger.info("Sending extracted data to candidate service...")
-        candidate_api_url_generate_candidate_endpoint= f"{CANDIDATE_SERVICE_URL}/ai-gb"
+        candidate_api_url_generate_candidate_endpoint= f"{CANDIDATE_SERVICE_URL}/ai"
         response = requests.post(
             candidate_api_url_generate_candidate_endpoint,
             json=candidate_dict,
