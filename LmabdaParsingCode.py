@@ -43,7 +43,7 @@ def update_status(track_id, status,headers,reason=None):
     if reason:
         params['reason'] = reason
     try:
-        response = requests.put(url, params=params, headers=headers,, timeout=15)
+        response = requests.put(url, params=params, headers=headers, timeout=15)
         response.raise_for_status()
         logger.info(f"Updated status '{status}' for trackId={track_id}")
     except Exception as e:
