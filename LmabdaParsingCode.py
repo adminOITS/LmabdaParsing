@@ -28,6 +28,7 @@ def get_parameter(name, with_decryption=False):
 
 # Fetch credentials from SSM
 API_KEY = get_parameter("/llama/api_key", with_decryption=True)
+CLIENT_SECRET_KEYCLOAK=get_parameter("/llama/client_secret_keycloak", with_decryption=True)
 BUCKET_NAME = "job-sourcing-private-bucket-test-env"
 
 CANDIDATE_SERVICE_URL = get_parameter("/llama/candidate_api_key", with_decryption=True)
@@ -35,18 +36,34 @@ CANDIDATE_SERVICE_URL = get_parameter("/llama/candidate_api_key", with_decryptio
 extractor = LlamaExtract(api_key=API_KEY)
 
 
-def update_status(track_id, status, reason=None):
+def update_status(track_id, status,headers,reason=None):
     """Call API to update status."""
-    url = f"{CANDIDATE_SERVICE_URL}/ai-processing-track/{track_id}/status/{status}"
+    url = f"{CANDIDATE_SERVICE_URL}/ai-processing/{track_id}/status/{status}"
     params = {}
     if reason:
         params['reason'] = reason
     try:
-        response = requests.put(url, params=params, timeout=15)
+        response = requests.put(url, params=params, headers=headers,, timeout=15)
         response.raise_for_status()
         logger.info(f"Updated status '{status}' for trackId={track_id}")
     except Exception as e:
         logger.error(f"Failed to update status '{status}' for trackId={track_id}: {e}")
+
+def get_access_token():
+    token_url = "https://job-sourcing.com/realms/jobsourcingrealm/protocol/openid-connect/token"
+    client_id = "lamdaParsingAiClient"
+    client_secret = CLIENT_SECRET_KEYCLOAK
+
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret
+    }
+
+    response = requests.post(token_url, data=data)
+    response.raise_for_status()
+
+    return response.json()["access_token"]
 
 # Define all Pydantic models (skip here for brevity — keep your original ones unchanged)
 
@@ -194,6 +211,13 @@ def get_or_create_agent(name: str, schema):
 def lambda_handler(event, context):
     
     try:
+        token = get_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
         logger.info("Lambda invoked")
         # Only one record expected per invocation
         record = event["Records"][0]
@@ -227,7 +251,7 @@ def lambda_handler(event, context):
 
         track_id = body.get("entityId")  # AI processing track ID
         # Mark the processing as IN_PROGRESS
-        update_status(track_id, "in-progress")
+        update_status(track_id, "in-progress",headers)
 
         # 4. Create new agent
         agent = get_or_create_agent("resume-parser-1", Profile)
@@ -255,7 +279,7 @@ def lambda_handler(event, context):
         response = requests.post(
             candidate_api_url_generate_candidate_endpoint,
             json=candidate_dict,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             timeout=30
         )
         response.raise_for_status()
@@ -279,7 +303,12 @@ def lambda_handler(event, context):
             pass
 
         if track_id:
-            update_status(track_id, "failed", reason=str(e))
+            token = get_access_token()
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            update_status(track_id, "failed", headers,reason=str(e))
 
         if 'local_path' in locals() and os.path.exists(local_path):
             os.remove(local_path)
