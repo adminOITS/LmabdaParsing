@@ -219,7 +219,7 @@ class Language(BaseModel):
     proficiencyLevel: LanguageProficiencyLevel = Field(..., description="Proficiency level in the language")
 
 class JobCategory(BaseModel):
-    category: JobCategoryEnum = Field(..., description="domain , sector or category ")
+    category: JobCategoryEnum = Field(..., description="domain , sector or category in the JobCategoryEnum ")
 
 class Candidate(BaseModel):
     firstName: str = Field(..., description="Candidate's first name default NOT_DEFINED")
