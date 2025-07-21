@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from enum import Enum
 
-class JobCategory(str, Enum):
+class JobCategoryEnum(str, Enum):
     ACCOUNTING = "ACCOUNTING"
     ADMINISTRATIVE_ASSISTANT = "ADMINISTRATIVE_ASSISTANT"
     AGRICULTURE = "AGRICULTURE"
@@ -218,6 +218,9 @@ class Language(BaseModel):
     language: Language = Field(..., description="Name of the language, e.g., English default NOT_DEFINED")
     proficiencyLevel: LanguageProficiencyLevel = Field(..., description="Proficiency level in the language")
 
+class JobCategory(BaseModel):
+    category: JobCategoryEnum = Field(..., description="domain , sector or category ")
+
 class Candidate(BaseModel):
     firstName: str = Field(..., description="Candidate's first name default NOT_DEFINED")
     lastName: str = Field(..., description="Candidate's last name default NOT_DEFINED")
@@ -230,7 +233,8 @@ class Candidate(BaseModel):
     experiences: List[Experience] = Field(..., description="Professional experience entries")
     education: List[Education] = Field(..., description="Education background")
     languages: List[Language] = Field(..., description="Languages spoken and proficiency levels")
-    categories: List[JobCategory] = Field(..., description=" sectors or domains")
+    categories: List[JobCategory] = Field(..., description="List of job categories")
+    
 
 
 class Profile(BaseModel):

@@ -5,7 +5,7 @@ import boto3
 import os
 import tempfile
 import requests
-from dtos import Profile
+from dtos import Profile,JobCategoryEnum
 import json
 
 import logging
@@ -141,6 +141,22 @@ def lambda_handler(event, context):
         # 6. Add only the entityId  (the track Id ) to candidate data
         candidate_dict["entityId"] = body.get("entityId")
         logger.info("Entity ID added to candidate data: %s", candidate_dict["entityId"])
+
+        # Normalize categories
+        raw_categories = candidate_dict.get("categories", [])
+        mapped_categories = []
+        for entry in raw_categories:
+            if isinstance(entry, dict) and "category" in entry:
+                raw_value = entry["category"]
+            else:
+                raw_value = entry
+
+            try:
+                mapped_categories.append(JobCategoryEnum(raw_value))
+            except ValueError:
+                logger.warning(f"Unrecognized job category: {raw_value}")
+
+        candidate_dict["categories"] = mapped_categories
 
         # 7. Delete temp file
         if os.path.exists(local_path):
