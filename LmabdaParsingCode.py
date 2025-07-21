@@ -130,7 +130,7 @@ def lambda_handler(event, context):
         update_status(track_id, "in-progress",headers)
 
         # 4. Create new agent
-        agent = get_or_create_agent("resume-parser-1", Profile)
+        agent = get_or_create_agent("resume-parser-0", Profile)
         # 5. Extract data
         logger.info("Extracting resume data...")
         result = agent.extract(local_path)
