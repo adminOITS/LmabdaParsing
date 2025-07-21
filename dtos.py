@@ -233,7 +233,7 @@ class Candidate(BaseModel):
     experiences: List[Experience] = Field(..., description="Professional experience entries")
     education: List[Education] = Field(..., description="Education background")
     languages: List[Language] = Field(..., description="Languages spoken and proficiency levels")
-    categoriesObj: List[JobCategory] = Field(..., description="List of job categories")
+    categories: List[JobCategory] = Field(..., description="List of job categories")
     
 
 

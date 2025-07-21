@@ -144,13 +144,13 @@ def lambda_handler(event, context):
         logger.info("Entity ID added to candidate data: %s", candidate_dict["entityId"])
 
         # Normalize categories
-        raw_categories = candidate_dict.get("categoriesObj", [])
+        raw_categories = candidate_dict.get("candidate", {}).get("categories", [])
         mapped_categories = []
 
         for entry in raw_categories:
                 mapped_categories.append(entry.get("category"))
 
-        candidate_dict["categories"] = mapped_categories
+        candidate_dict["candidate"]["categories"] = mapped_categories
 
         logger.info("******************************************************************* Candidate after mapping the candidates")
         logger.info("Resume data extracted.%s",candidate_dict)
