@@ -136,7 +136,7 @@ def lambda_handler(event, context):
         result = agent.extract(local_path)
         candidate_dict = result.data
         
-        logger.info("*******************************************************************")
+        logger.info("******************************************************************* Candidate")
         logger.info("Resume data extracted.%s",candidate_dict)
 
         # 6. Add only the entityId  (the track Id ) to candidate data
@@ -158,6 +158,9 @@ def lambda_handler(event, context):
                 logger.warning(f"Unrecognized job category: {raw_value}")
 
         candidate_dict["categories"] = mapped_categories
+
+        logger.info("******************************************************************* Candidate after mapping the candidates")
+        logger.info("Resume data extracted.%s",candidate_dict)
 
         # 7. Delete temp file
         if os.path.exists(local_path):
