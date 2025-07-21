@@ -36,18 +36,23 @@ CANDIDATE_SERVICE_URL = get_parameter("/llama/candidate_api_key", with_decryptio
 extractor = LlamaExtract(api_key=API_KEY)
 
 
-def update_status(track_id, status,headers,reason=None):
+def update_status(track_id, status,headers,reason=None,throwbel=True):
     """Call API to update status."""
     url = f"{CANDIDATE_SERVICE_URL}/ai-processing/{track_id}/status/{status}"
     params = {}
     if reason:
         params['reason'] = reason
-    try:
+    if throwbel:
         response = requests.put(url, params=params, headers=headers, timeout=15)
         response.raise_for_status()
         logger.info(f"Updated status '{status}' for trackId={track_id}")
-    except Exception as e:
-        logger.error(f"Failed to update status '{status}' for trackId={track_id}: {e}")
+    else:
+        try:
+            response = requests.put(url, params=params, headers=headers, timeout=15)
+            response.raise_for_status()
+            logger.info(f"Updated status '{status}' for trackId={track_id}")
+        except Exception as e:
+            logger.error(f"Failed to update status '{status}' for trackId={track_id}: {e}")
 
 def get_access_token():
     token_url = "https://job-sourcing.com/realms/jobsourcingrealm/protocol/openid-connect/token"
@@ -367,8 +372,7 @@ def lambda_handler(event, context):
 
         track_id = body.get("entityId")  # AI processing track ID
         # Mark the processing as IN_PROGRESS
-        progressResponse = update_status(track_id, "in-progress",headers)
-        progressResponse.raise_for_status()
+        update_status(track_id, "in-progress",headers)
 
         # 4. Create new agent
         agent = get_or_create_agent("resume-parser-1", Profile)
@@ -425,7 +429,7 @@ def lambda_handler(event, context):
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json"
             }
-            update_status(track_id, "failed", headers,reason=str(e))
+            update_status(track_id, "failed", headers,reason=str(e),throwbel=False)
 
         if 'local_path' in locals() and os.path.exists(local_path):
             os.remove(local_path)
