@@ -31,7 +31,8 @@ API_KEY = get_parameter("/llama/api_key", with_decryption=True)
 CLIENT_SECRET_KEYCLOAK=get_parameter("/llama/client_secret_keycloak", with_decryption=True)
 BUCKET_NAME = "job-sourcing-private-bucket-test-env"
 
-CANDIDATE_SERVICE_URL = get_parameter("/llama/candidate_api_key", with_decryption=True)
+GATE_WAY_URL = get_parameter("/jobsourcing/env/dev/gateway/url")
+CANDIDATE_SERVICE_URL=GATE_WAY_URL+"/CANDIDATE-SERVICE/api/v1/candidates"
 
 extractor = LlamaExtract(api_key=API_KEY)
 
@@ -72,8 +73,6 @@ def get_access_token():
 
 # Define all Pydantic models (skip here for brevity — keep your original ones unchanged)
 
-
-from enum import Enum
 
 class JobCategory(str, Enum):
     ACCOUNTING = "ACCOUNTING"
