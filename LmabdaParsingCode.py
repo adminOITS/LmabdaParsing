@@ -5,7 +5,8 @@ import boto3
 import os
 import tempfile
 import requests
-from dtos import Profile,JobCategoryEnum
+from dtos import Profile, JobCategoryEnum
+
 import json
 
 import logging
