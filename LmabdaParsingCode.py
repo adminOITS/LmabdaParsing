@@ -367,7 +367,8 @@ def lambda_handler(event, context):
 
         track_id = body.get("entityId")  # AI processing track ID
         # Mark the processing as IN_PROGRESS
-        update_status(track_id, "in-progress",headers)
+        progressResponse = update_status(track_id, "in-progress",headers)
+        progressResponse.raise_for_status()
 
         # 4. Create new agent
         agent = get_or_create_agent("resume-parser-1", Profile)
