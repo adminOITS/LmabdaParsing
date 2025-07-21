@@ -130,7 +130,7 @@ def lambda_handler(event, context):
         update_status(track_id, "in-progress",headers)
 
         # 4. Create new agent
-        agent = get_or_create_agent("resume-parser-0", Profile)
+        agent = get_or_create_agent("resume-parser-1", Profile)
         # 5. Extract data
         logger.info("Extracting resume data...")
         result = agent.extract(local_path)
@@ -144,18 +144,11 @@ def lambda_handler(event, context):
         logger.info("Entity ID added to candidate data: %s", candidate_dict["entityId"])
 
         # Normalize categories
-        raw_categories = candidate_dict.get("categories", [])
+        raw_categories = candidate_dict.get("categoriesObj", [])
         mapped_categories = []
-        for entry in raw_categories:
-            if isinstance(entry, dict) and "category" in entry:
-                raw_value = entry["category"]
-            else:
-                raw_value = entry
 
-            try:
-                mapped_categories.append(JobCategoryEnum(raw_value))
-            except ValueError:
-                logger.warning(f"Unrecognized job category: {raw_value}")
+        for entry in raw_categories:
+                mapped_categories.append(entry.get("category"))
 
         candidate_dict["categories"] = mapped_categories
 
